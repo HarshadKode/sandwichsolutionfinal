@@ -1,13 +1,11 @@
 package be.abis.sandwich.repository;
 
 import be.abis.sandwich.model.Person;
+import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;
 
-public interface PersonRepository {
+public interface PersonRepository extends JpaRepository<Person, Integer> {
 
-    Optional<Person> findPersonByName(String firstName, String lastName);
-    /** Inserts the person and returns it with its generated id. */
-    Person addPerson(Person person);
-
+    Optional<Person> findByFirstNameIgnoreCaseAndLastNameIgnoreCase(String firstName, String lastName);
 }

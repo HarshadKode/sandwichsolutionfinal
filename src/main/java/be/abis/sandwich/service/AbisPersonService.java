@@ -17,7 +17,7 @@ public class AbisPersonService implements PersonService {
     public Person findOrCreatePerson(String firstName, String lastName) {
         String first = firstName.trim();
         String last = lastName.trim();
-        return personRepository.findPersonByName(first, last)
-                .orElseGet(() -> personRepository.addPerson(new Person(first, last)));
+        return personRepository.findByFirstNameIgnoreCaseAndLastNameIgnoreCase(first, last)
+                .orElseGet(() -> personRepository.save(new Person(first, last)));
     }
 }

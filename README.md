@@ -15,19 +15,19 @@ Reference solution of the Abis sandwich ordering exercise (Spring Boot 4, Java 1
 
 ## Architecture
 
-Follows the diagram of the assignment: controller → service (interface + `Abis…Service`) → repository (interface + `DB…Repository`).
+Follows the diagram of the assignment: controller → service (interface + `Abis…Service`) → repository. The repositories are Spring Data JPA interfaces: Spring generates the implementation, so there are no `DB…Repository` classes.
 
 ```
 controller/   SandwichController, SandwichOrderController, GlobalExceptionHandler
 service/      SandwichService, CourseService, PersonService, SandwichOrderService  (+ Abis… implementations)
 repository/   SandwichRepository, CourseRepository, PersonRepository,
-              SandwichOrderRepository, SandwichOrderDetailRepository             (+ DB… implementations, Spring JdbcClient)
-model/        Sandwich, Course, Person, SandwichOrder, SandwichOrderDetail (+ enumeration/BreadType)
+              SandwichOrderRepository, SandwichOrderDetailRepository             (Spring Data JpaRepository interfaces)
+model/        JPA entities: Sandwich, Course, Person, SandwichOrder, SandwichOrderDetail (+ enumeration/BreadType)
 exception/    domain exceptions, mapped to HTTP 404 / 409
 config/       AngularFrontendConfig (serves the frontend), OpenApiConfig
 ```
 
-Tables (`schema.sql`): `sandwiches`, `abis_courses`, `abis_persons`, `sandwich_orders` (with `total_price`), `sandwich_order_details`.
+Tables (created by Hibernate from the entities): `sandwiches`, `abis_courses`, `abis_persons`, `sandwich_orders` (with `total_price`), `sandwich_order_details`.
 
 ## The API
 
@@ -55,18 +55,18 @@ Rules and choices:
 
 ## Database
 
-Default: embedded H2 in Oracle mode (`application.properties`), no installation needed. `schema.sql` and `data.sql` run at startup.
+Default: embedded H2 in Oracle mode (`application.properties`), no installation needed. Hibernate creates the tables (`ddl-auto=create`), then `data.sql` fills the menu.
 
 Oracle: set the connection in `application-oracle.properties` and run with `--spring.profiles.active=oracle`.
-Create the tables first by running `schema.sql` (valid on Oracle 12c+) and optionally `data.sql` in your schema.
+Hibernate then creates the missing tables itself (`ddl-auto=update`, needs Oracle 12c+ for identity columns). `data.sql` (the menu) is not run automatically on Oracle: run it once by hand in your schema.
 
 The assignment asks for two schemas (one per API). This solution is one application with one datasource, so the
 five tables live in one schema. To split them: sandwiches in one schema and the order tables in the other, grant
-`REFERENCES` / `SELECT` on `sandwiches` to the order schema and prefix the table names in the SQL of the repositories.
+`REFERENCES` / `SELECT` on `sandwiches` to the order schema and put `schema = "..."` in the `@Table` annotations of the entities.
 
 ## Tests (`./mvnw verify`)
 
-* Repositories: `@JdbcTest` on the embedded database (`DBSandwichRepositoryTest`, `DBOrderRepositoriesTest`)
+* Repositories: `@DataJpaTest` on the embedded database (`SandwichRepositoryTest`, `OrderRepositoriesTest`)
 * Services: Mockito unit tests (`AbisSandwichServiceTest`, `AbisSandwichOrderServiceTest`, `FindOrCreateServicesTest`)
 * Controllers: `@WebMvcTest` (`SandwichControllerTest`, `SandwichOrderControllerTest`)
 * Whole application over HTTP incl. parallel orders, print file and API docs: `SandwichApiIntegrationTest`

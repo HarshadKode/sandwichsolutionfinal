@@ -7,6 +7,7 @@ import be.abis.sandwich.model.Sandwich;
 import be.abis.sandwich.repository.SandwichRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Locale;
@@ -26,8 +27,8 @@ public class AbisSandwichService implements SandwichService {
         boolean hasName = name != null && !name.isBlank();
 
         List<Sandwich> sandwiches = hasCategory
-                ? sandwichRepository.findSandwichesByCategory(category.trim())
-                : sandwichRepository.findAllSandwiches();
+                ? sandwichRepository.findByCategoryIgnoreCaseOrderByName(category.trim())
+                : sandwichRepository.findAllByOrderByCategoryAscNameAsc();
         if (!hasName) {
             return sandwiches;
         }
@@ -39,30 +40,31 @@ public class AbisSandwichService implements SandwichService {
 
     @Override
     public Sandwich findSandwichById(int id) {
-        return sandwichRepository.findSandwichById(id).orElseThrow(() -> new SandwichNotFoundException(id));
+        return sandwichRepository.findById(id).orElseThrow(() -> new SandwichNotFoundException(id));
     }
 
     @Override
     public Sandwich addSandwich(Sandwich sandwich) {
-        if (sandwichRepository.findSandwichByName(sandwich.getName()).isPresent()) {
+        if (sandwichRepository.findByNameIgnoreCase(sandwich.getName()).isPresent()) {
             throw new DuplicateSandwichException(sandwich.getName());
         }
-        return sandwichRepository.addSandwich(sandwich);
+        sandwich.setId(0); // the id is generated; an id from the client must never overwrite an existing sandwich
+        return sandwichRepository.save(sandwich);
     }
 
     @Override
+    @Transactional
     public Sandwich updatePrice(int id, double basePrice) {
         Sandwich sandwich = findSandwichById(id);
         sandwich.setBasePrice(basePrice);
-        sandwichRepository.updatePrice(sandwich);
-        return sandwich;
+        return sandwichRepository.save(sandwich);
     }
 
     @Override
     public void deleteSandwich(int id) {
         Sandwich sandwich = findSandwichById(id);
         try {
-            sandwichRepository.deleteSandwich(id);
+            sandwichRepository.delete(sandwich); // the foreign key refuses it when the sandwich is part of an order
         } catch (DataIntegrityViolationException e) {
             throw new SandwichInUseException(sandwich.getName());
         }

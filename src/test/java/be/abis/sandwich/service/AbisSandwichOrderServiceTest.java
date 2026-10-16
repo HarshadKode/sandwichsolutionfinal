@@ -90,13 +90,13 @@ class AbisSandwichOrderServiceTest {
         when(sandwichService.findSandwichById(21)).thenReturn(pinky);
         when(personService.findOrCreatePerson("Ada", "Lovelace")).thenReturn(ada);
         when(courseService.findOrCreateCourse("Spring Boot")).thenReturn(course);
-        when(orderRepository.findSandwichOrder(DAY, 1)).thenReturn(Optional.empty());
-        when(orderRepository.addSandwichOrder(any(SandwichOrder.class))).thenReturn(existingOrder);
-        when(detailRepository.countSandwichesOfPerson(100, 10)).thenReturn(0);
+        when(orderRepository.findByOrderDateAndCourse(DAY, course)).thenReturn(Optional.empty());
+        when(orderRepository.save(any(SandwichOrder.class))).thenReturn(existingOrder);
+        when(detailRepository.countSandwichesOfPerson(existingOrder, ada)).thenReturn(0);
 
         service.addSandwichOrderDetail(sod);
 
-        verify(detailRepository).addSandwichOrderDetail(sod);
+        verify(detailRepository).save(sod);
         assertThat(sod.getSandwich()).isSameAs(pinky);
         assertThat(sod.getPerson()).isSameAs(ada);
         assertThat(sod.getSandwichOrder()).isSameAs(existingOrder);
@@ -108,13 +108,13 @@ class AbisSandwichOrderServiceTest {
         when(sandwichService.findSandwichById(1)).thenReturn(hesp);
         when(personService.findOrCreatePerson("Bob", "Builder")).thenReturn(bob);
         when(courseService.findOrCreateCourse("Spring Boot")).thenReturn(course);
-        when(orderRepository.findSandwichOrder(DAY, 1)).thenReturn(Optional.of(existingOrder));
-        when(detailRepository.countSandwichesOfPerson(100, 11)).thenReturn(0);
+        when(orderRepository.findByOrderDateAndCourse(DAY, course)).thenReturn(Optional.of(existingOrder));
+        when(detailRepository.countSandwichesOfPerson(existingOrder, bob)).thenReturn(0);
 
         service.addSandwichOrderDetail(sod);
 
-        verify(orderRepository, never()).addSandwichOrder(any());
-        verify(detailRepository).addSandwichOrderDetail(sod);
+        verify(orderRepository, never()).save(any());
+        verify(detailRepository).save(sod);
     }
 
     @Test
@@ -123,12 +123,12 @@ class AbisSandwichOrderServiceTest {
         when(sandwichService.findSandwichById(1)).thenReturn(hesp);
         when(personService.findOrCreatePerson("Ada", "Lovelace")).thenReturn(ada);
         when(courseService.findOrCreateCourse("Spring Boot")).thenReturn(course);
-        when(orderRepository.findSandwichOrder(DAY, 1)).thenReturn(Optional.of(existingOrder));
-        when(detailRepository.countSandwichesOfPerson(100, 10)).thenReturn(1);
+        when(orderRepository.findByOrderDateAndCourse(DAY, course)).thenReturn(Optional.of(existingOrder));
+        when(detailRepository.countSandwichesOfPerson(existingOrder, ada)).thenReturn(1);
 
         service.addSandwichOrderDetail(sod);
 
-        verify(detailRepository).addSandwichOrderDetail(sod);
+        verify(detailRepository).save(sod);
     }
 
     @Test
@@ -137,14 +137,14 @@ class AbisSandwichOrderServiceTest {
         when(sandwichService.findSandwichById(1)).thenReturn(hesp);
         when(personService.findOrCreatePerson("Ada", "Lovelace")).thenReturn(ada);
         when(courseService.findOrCreateCourse("Spring Boot")).thenReturn(course);
-        when(orderRepository.findSandwichOrder(DAY, 1)).thenReturn(Optional.of(existingOrder));
-        when(detailRepository.countSandwichesOfPerson(100, 10)).thenReturn(2);
+        when(orderRepository.findByOrderDateAndCourse(DAY, course)).thenReturn(Optional.of(existingOrder));
+        when(detailRepository.countSandwichesOfPerson(existingOrder, ada)).thenReturn(2);
 
         assertThatThrownBy(() -> service.addSandwichOrderDetail(sod))
                 .isInstanceOf(MaxSandwichesExceededException.class)
                 .hasMessageContaining("Ada Lovelace")
                 .hasMessageContaining("2");
-        verify(detailRepository, never()).addSandwichOrderDetail(any());
+        verify(detailRepository, never()).save(any());
     }
 
     @Test
@@ -153,7 +153,7 @@ class AbisSandwichOrderServiceTest {
         when(sandwichService.findSandwichById(999)).thenThrow(new SandwichNotFoundException(999));
 
         assertThatThrownBy(() -> service.addSandwichOrderDetail(sod)).isInstanceOf(SandwichNotFoundException.class);
-        verify(detailRepository, never()).addSandwichOrderDetail(any());
+        verify(detailRepository, never()).save(any());
     }
 
     // ---- calculateSandwichOrderPrice ----
@@ -163,8 +163,8 @@ class AbisSandwichOrderServiceTest {
     }
 
     private void orderExists() {
-        when(courseRepository.findCourseByTitle("Spring Boot")).thenReturn(Optional.of(course));
-        when(orderRepository.findSandwichOrder(DAY, 1)).thenReturn(Optional.of(existingOrder));
+        when(courseRepository.findByTitleIgnoreCase("Spring Boot")).thenReturn(Optional.of(course));
+        when(orderRepository.findByOrderDateAndCourse(DAY, course)).thenReturn(Optional.of(existingOrder));
     }
 
     @Test
@@ -177,7 +177,8 @@ class AbisSandwichOrderServiceTest {
         double total = service.calculateSandwichOrderPrice(new SandwichOrder(DAY, new Course("Spring Boot")));
 
         assertThat(total).isEqualTo(11.2);
-        verify(orderRepository).updateTotalPrice(100, 11.2);
+        verify(orderRepository).save(existingOrder);
+        assertThat(existingOrder.getTotalPrice()).isEqualTo(11.2);
     }
 
     @Test
@@ -192,7 +193,7 @@ class AbisSandwichOrderServiceTest {
 
     @Test
     void totalPriceOfAnOrderThatDoesNotExistIsRefused() {
-        when(courseRepository.findCourseByTitle("Nope")).thenReturn(Optional.empty());
+        when(courseRepository.findByTitleIgnoreCase("Nope")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.calculateSandwichOrderPrice(new SandwichOrder(DAY, new Course("Nope"))))
                 .isInstanceOf(SandwichOrderNotFoundException.class)
@@ -249,7 +250,7 @@ class AbisSandwichOrderServiceTest {
 
     @Test
     void printOfAnOrderThatDoesNotExistIsRefused() {
-        when(courseRepository.findCourseByTitle("Nope")).thenReturn(Optional.empty());
+        when(courseRepository.findByTitleIgnoreCase("Nope")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.printSandwichOrder(new SandwichOrder(DAY, new Course("Nope"))))
                 .isInstanceOf(SandwichOrderNotFoundException.class);

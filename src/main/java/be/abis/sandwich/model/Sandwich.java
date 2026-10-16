@@ -1,17 +1,32 @@
 package be.abis.sandwich.model;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.PositiveOrZero;
 
+@Entity
+@Table(name = "sandwiches", uniqueConstraints = @UniqueConstraint(name = "uq_sandwiches_name", columnNames = "name"))
 public class Sandwich {
 
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int id;
     @NotBlank(message = "name is required")
+    @Column(nullable = false, length = 100)
     private String name;
+    @Column(length = 500)
     private String description;
     @NotBlank(message = "category is required")
+    @Column(nullable = false, length = 50)
     private String category;
     @PositiveOrZero(message = "basePrice must not be negative")
+    @Column(name = "base_price", nullable = false, columnDefinition = "NUMBER(6,2)")
     private double basePrice;
 
     public Sandwich(){}

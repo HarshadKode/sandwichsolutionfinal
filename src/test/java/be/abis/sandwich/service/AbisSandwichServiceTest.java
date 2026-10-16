@@ -37,7 +37,7 @@ class AbisSandwichServiceTest {
 
     @Test
     void withoutFiltersAllSandwichesAreReturned() {
-        when(sandwichRepository.findAllSandwiches()).thenReturn(List.of(hesp, pinky));
+        when(sandwichRepository.findAllByOrderByCategoryAscNameAsc()).thenReturn(List.of(hesp, pinky));
 
         assertThat(service.findSandwiches(null, null)).containsExactly(hesp, pinky);
         assertThat(service.findSandwiches(" ", "")).containsExactly(hesp, pinky);
@@ -45,15 +45,15 @@ class AbisSandwichServiceTest {
 
     @Test
     void categoryFilterUsesTheRepository() {
-        when(sandwichRepository.findSandwichesByCategory("Kip")).thenReturn(List.of(kipCurry));
+        when(sandwichRepository.findByCategoryIgnoreCaseOrderByName("Kip")).thenReturn(List.of(kipCurry));
 
         assertThat(service.findSandwiches("Kip", null)).containsExactly(kipCurry);
-        verify(sandwichRepository, never()).findAllSandwiches();
+        verify(sandwichRepository, never()).findAllByOrderByCategoryAscNameAsc();
     }
 
     @Test
     void nameFilterMatchesPartOfTheNameIgnoringCase() {
-        when(sandwichRepository.findAllSandwiches()).thenReturn(List.of(hesp, pinky, kipCurry));
+        when(sandwichRepository.findAllByOrderByCategoryAscNameAsc()).thenReturn(List.of(hesp, pinky, kipCurry));
 
         assertThat(service.findSandwiches(null, "IN")).containsExactly(pinky);
         assertThat(service.findSandwiches(null, "i")).containsExactly(pinky, kipCurry);
@@ -61,7 +61,7 @@ class AbisSandwichServiceTest {
 
     @Test
     void categoryAndNameFiltersCanBeCombined() {
-        when(sandwichRepository.findSandwichesByCategory("Vlees")).thenReturn(List.of(hesp));
+        when(sandwichRepository.findByCategoryIgnoreCaseOrderByName("Vlees")).thenReturn(List.of(hesp));
 
         assertThat(service.findSandwiches("Vlees", "kip")).isEmpty();
         assertThat(service.findSandwiches("Vlees", "hes")).containsExactly(hesp);
@@ -69,7 +69,7 @@ class AbisSandwichServiceTest {
 
     @Test
     void findSandwichByIdThrowsWhenUnknown() {
-        when(sandwichRepository.findSandwichById(99)).thenReturn(Optional.empty());
+        when(sandwichRepository.findById(99)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.findSandwichById(99))
                 .isInstanceOf(SandwichNotFoundException.class)
@@ -79,53 +79,54 @@ class AbisSandwichServiceTest {
     @Test
     void addSandwichSavesANewSandwich() {
         Sandwich fresh = new Sandwich(0, "Nieuw", "New", "Vlees", 3);
-        when(sandwichRepository.findSandwichByName("Nieuw")).thenReturn(Optional.empty());
-        when(sandwichRepository.addSandwich(fresh)).thenReturn(fresh);
+        when(sandwichRepository.findByNameIgnoreCase("Nieuw")).thenReturn(Optional.empty());
+        when(sandwichRepository.save(fresh)).thenReturn(fresh);
 
         assertThat(service.addSandwich(fresh)).isSameAs(fresh);
-        verify(sandwichRepository).addSandwich(fresh);
+        verify(sandwichRepository).save(fresh);
     }
 
     @Test
     void addSandwichRejectsADuplicateName() {
-        when(sandwichRepository.findSandwichByName("Hesp")).thenReturn(Optional.of(hesp));
+        when(sandwichRepository.findByNameIgnoreCase("Hesp")).thenReturn(Optional.of(hesp));
 
         assertThatThrownBy(() -> service.addSandwich(new Sandwich(0, "Hesp", "again", "Vlees", 1)))
                 .isInstanceOf(DuplicateSandwichException.class);
-        verify(sandwichRepository, never()).addSandwich(any());
+        verify(sandwichRepository, never()).save(any());
     }
 
     @Test
     void updatePriceSavesTheNewPrice() {
-        when(sandwichRepository.findSandwichById(1)).thenReturn(Optional.of(hesp));
+        when(sandwichRepository.findById(1)).thenReturn(Optional.of(hesp));
+        when(sandwichRepository.save(hesp)).thenReturn(hesp);
 
         Sandwich updated = service.updatePrice(1, 4.0);
 
         assertThat(updated.getBasePrice()).isEqualTo(4.0);
-        verify(sandwichRepository).updatePrice(hesp);
+        verify(sandwichRepository).save(hesp);
     }
 
     @Test
     void updatePriceThrowsWhenTheSandwichDoesNotExist() {
-        when(sandwichRepository.findSandwichById(99)).thenReturn(Optional.empty());
+        when(sandwichRepository.findById(99)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.updatePrice(99, 1)).isInstanceOf(SandwichNotFoundException.class);
-        verify(sandwichRepository, never()).updatePrice(any());
+        verify(sandwichRepository, never()).save(any());
     }
 
     @Test
     void deleteSandwichRemovesIt() {
-        when(sandwichRepository.findSandwichById(1)).thenReturn(Optional.of(hesp));
+        when(sandwichRepository.findById(1)).thenReturn(Optional.of(hesp));
 
         service.deleteSandwich(1);
 
-        verify(sandwichRepository).deleteSandwich(1);
+        verify(sandwichRepository).delete(hesp);
     }
 
     @Test
     void deleteSandwichThatIsPartOfAnOrderIsRefused() {
-        when(sandwichRepository.findSandwichById(1)).thenReturn(Optional.of(hesp));
-        doThrow(new DataIntegrityViolationException("foreign key")).when(sandwichRepository).deleteSandwich(1);
+        when(sandwichRepository.findById(1)).thenReturn(Optional.of(hesp));
+        doThrow(new DataIntegrityViolationException("foreign key")).when(sandwichRepository).delete(hesp);
 
         assertThatThrownBy(() -> service.deleteSandwich(1))
                 .isInstanceOf(SandwichInUseException.class)
@@ -134,9 +135,9 @@ class AbisSandwichServiceTest {
 
     @Test
     void deleteSandwichThrowsWhenUnknown() {
-        when(sandwichRepository.findSandwichById(99)).thenReturn(Optional.empty());
+        when(sandwichRepository.findById(99)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.deleteSandwich(99)).isInstanceOf(SandwichNotFoundException.class);
-        verify(sandwichRepository, never()).deleteSandwich(99);
+        verify(sandwichRepository, never()).delete(any());
     }
 }

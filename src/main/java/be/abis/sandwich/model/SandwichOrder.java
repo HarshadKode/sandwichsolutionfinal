@@ -1,18 +1,37 @@
 package be.abis.sandwich.model;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.LocalDate;
 
+/** The sandwich order of one course on one day. */
+@Entity
+@Table(name = "sandwich_orders",
+        uniqueConstraints = @UniqueConstraint(name = "uq_orders_date_course", columnNames = {"order_date", "course_id"}))
 public class SandwichOrder {
 
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int id;
     @NotNull(message = "orderDate is required (yyyy-MM-dd)")
+    @Column(name = "order_date", nullable = false)
     private LocalDate orderDate;
     @NotNull(message = "course is required")
     @Valid
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "course_id", nullable = false)
     private Course course;
+    @Column(name = "total_price", nullable = false, columnDefinition = "NUMBER(8,2)")
     private double totalPrice;
 
     public SandwichOrder(){

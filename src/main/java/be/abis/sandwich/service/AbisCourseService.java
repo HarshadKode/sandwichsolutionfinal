@@ -16,7 +16,7 @@ public class AbisCourseService implements CourseService {
     @Override
     public Course findOrCreateCourse(String title) {
         String trimmed = title.trim();
-        return courseRepository.findCourseByTitle(trimmed)
-                .orElseGet(() -> courseRepository.addCourse(new Course(trimmed)));
+        return courseRepository.findByTitleIgnoreCase(trimmed)
+                .orElseGet(() -> courseRepository.save(new Course(trimmed)));
     }
 }

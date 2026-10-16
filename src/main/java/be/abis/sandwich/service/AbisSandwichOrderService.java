@@ -78,7 +78,7 @@ public class AbisSandwichOrderService implements SandwichOrderService {
         Person person = personService.findOrCreatePerson(sod.getPerson().getFirstName(), sod.getPerson().getLastName());
         SandwichOrder order = findOrCreateOrder(sod.getSandwichOrder());
 
-        int alreadyOrdered = sandwichOrderDetailRepository.countSandwichesOfPerson(order.getId(), person.getId());
+        int alreadyOrdered = sandwichOrderDetailRepository.countSandwichesOfPerson(order, person);
         if (alreadyOrdered + sod.getAmount() > MAX_SANDWICHES_PER_PERSON) {
             throw new MaxSandwichesExceededException(person.getFirstName() + " " + person.getLastName(), MAX_SANDWICHES_PER_PERSON);
         }
@@ -86,7 +86,8 @@ public class AbisSandwichOrderService implements SandwichOrderService {
         sod.setSandwich(sandwich);
         sod.setPerson(person);
         sod.setSandwichOrder(order);
-        sandwichOrderDetailRepository.addSandwichOrderDetail(sod);
+        sod.setId(0); // a new row: an id from the client must never overwrite an existing one
+        sandwichOrderDetailRepository.save(sod);
     }
 
     @Override
@@ -111,20 +112,21 @@ public class AbisSandwichOrderService implements SandwichOrderService {
     public double calculateSandwichOrderPrice(SandwichOrder so) {
         SandwichOrder order = findExistingOrder(so);
         double total = total(sandwichOrderDetailRepository.findDetailsByOrder(order));
-        sandwichOrderRepository.updateTotalPrice(order.getId(), total);
+        order.setTotalPrice(total);
+        sandwichOrderRepository.save(order);
         return total;
     }
 
     private SandwichOrder findOrCreateOrder(SandwichOrder requested) {
         Course course = courseService.findOrCreateCourse(requested.getCourse().getTitle());
-        return sandwichOrderRepository.findSandwichOrder(requested.getOrderDate(), course.getId())
-                .orElseGet(() -> sandwichOrderRepository.addSandwichOrder(new SandwichOrder(requested.getOrderDate(), course)));
+        return sandwichOrderRepository.findByOrderDateAndCourse(requested.getOrderDate(), course)
+                .orElseGet(() -> sandwichOrderRepository.save(new SandwichOrder(requested.getOrderDate(), course)));
     }
 
     private SandwichOrder findExistingOrder(SandwichOrder requested) {
         String title = requested.getCourse().getTitle().trim();
-        return courseRepository.findCourseByTitle(title)
-                .flatMap(course -> sandwichOrderRepository.findSandwichOrder(requested.getOrderDate(), course.getId()))
+        return courseRepository.findByTitleIgnoreCase(title)
+                .flatMap(course -> sandwichOrderRepository.findByOrderDateAndCourse(requested.getOrderDate(), course))
                 .orElseThrow(() -> new SandwichOrderNotFoundException(requested.getOrderDate(), title));
     }
 

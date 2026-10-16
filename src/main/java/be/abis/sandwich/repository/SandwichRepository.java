@@ -1,19 +1,16 @@
 package be.abis.sandwich.repository;
 
 import be.abis.sandwich.model.Sandwich;
+import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
 import java.util.Optional;
 
-public interface SandwichRepository {
+public interface SandwichRepository extends JpaRepository<Sandwich, Integer> {
 
-    List<Sandwich> findAllSandwiches();
-    Optional<Sandwich> findSandwichById(int id);
-    Optional<Sandwich> findSandwichByName(String name);
-    List<Sandwich> findSandwichesByCategory(String category);
-    /** Inserts the sandwich and returns it with its generated id. */
-    Sandwich addSandwich(Sandwich sandwich);
-    void updatePrice(Sandwich sandwich);
-    void deleteSandwich(int id);
+    List<Sandwich> findAllByOrderByCategoryAscNameAsc();
 
+    List<Sandwich> findByCategoryIgnoreCaseOrderByName(String category);
+
+    Optional<Sandwich> findByNameIgnoreCase(String name);
 }

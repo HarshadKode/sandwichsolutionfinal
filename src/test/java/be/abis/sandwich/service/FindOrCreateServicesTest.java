@@ -28,16 +28,16 @@ class FindOrCreateServicesTest {
     @Test
     void existingCourseIsReused() {
         Course existing = new Course(5, "Spring Boot");
-        when(courseRepository.findCourseByTitle("Spring Boot")).thenReturn(Optional.of(existing));
+        when(courseRepository.findByTitleIgnoreCase("Spring Boot")).thenReturn(Optional.of(existing));
 
         assertThat(new AbisCourseService(courseRepository).findOrCreateCourse("  Spring Boot ")).isSameAs(existing);
-        verify(courseRepository, never()).addCourse(any());
+        verify(courseRepository, never()).save(any());
     }
 
     @Test
     void unknownCourseIsCreated() {
-        when(courseRepository.findCourseByTitle("Java")).thenReturn(Optional.empty());
-        when(courseRepository.addCourse(any(Course.class))).thenAnswer(call -> {
+        when(courseRepository.findByTitleIgnoreCase("Java")).thenReturn(Optional.empty());
+        when(courseRepository.save(any(Course.class))).thenAnswer(call -> {
             Course course = call.getArgument(0);
             course.setId(7);
             return course;
@@ -52,16 +52,16 @@ class FindOrCreateServicesTest {
     @Test
     void existingPersonIsReused() {
         Person existing = new Person(3, "Ada", "Lovelace");
-        when(personRepository.findPersonByName("Ada", "Lovelace")).thenReturn(Optional.of(existing));
+        when(personRepository.findByFirstNameIgnoreCaseAndLastNameIgnoreCase("Ada", "Lovelace")).thenReturn(Optional.of(existing));
 
         assertThat(new AbisPersonService(personRepository).findOrCreatePerson(" Ada", "Lovelace ")).isSameAs(existing);
-        verify(personRepository, never()).addPerson(any());
+        verify(personRepository, never()).save(any());
     }
 
     @Test
     void unknownPersonIsCreated() {
-        when(personRepository.findPersonByName("Bob", "Builder")).thenReturn(Optional.empty());
-        when(personRepository.addPerson(any(Person.class))).thenAnswer(call -> {
+        when(personRepository.findByFirstNameIgnoreCaseAndLastNameIgnoreCase("Bob", "Builder")).thenReturn(Optional.empty());
+        when(personRepository.save(any(Person.class))).thenAnswer(call -> {
             Person person = call.getArgument(0);
             person.setId(9);
             return person;
