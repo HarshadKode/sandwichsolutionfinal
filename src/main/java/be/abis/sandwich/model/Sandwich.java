@@ -1,13 +1,17 @@
 package be.abis.sandwich.model;
 
-import java.util.Objects;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.PositiveOrZero;
 
 public class Sandwich {
 
     private int id;
+    @NotBlank(message = "name is required")
     private String name;
     private String description;
+    @NotBlank(message = "category is required")
     private String category;
+    @PositiveOrZero(message = "basePrice must not be negative")
     private double basePrice;
 
     public Sandwich(){}

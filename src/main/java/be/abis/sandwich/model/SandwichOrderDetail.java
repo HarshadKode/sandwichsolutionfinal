@@ -1,15 +1,28 @@
 package be.abis.sandwich.model;
 
 import be.abis.sandwich.enumeration.BreadType;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
 
 public class SandwichOrderDetail {
 
+    private int id;
+    @NotNull(message = "sandwich is required")
     private Sandwich sandwich;
+    @Min(value = 1, message = "amount must be at least 1")
+    @Max(value = 2, message = "you can order at most 2 sandwiches")
     private int amount=1;
+    @NotNull(message = "breadType is required (WHITE or BROWN)")
     private BreadType breadType;
     private boolean vegetables;
     private String comment;
+    @NotNull(message = "person is required")
+    @Valid
     private Person person;
+    @NotNull(message = "sandwichOrder is required")
+    @Valid
     private SandwichOrder sandwichOrder;
 
     public SandwichOrderDetail(){}
@@ -21,6 +34,14 @@ public class SandwichOrderDetail {
         this.vegetables = vegetables;
         this.comment = comment;
         this.person = person;
+    }
+
+    public int getId() {
+        return id;
+    }
+
+    public void setId(int id) {
+        this.id = id;
     }
 
     public Sandwich getSandwich() {
