@@ -1,7 +1,8 @@
 package be.abis.sandwich.controller;
 
-import be.abis.sandwich.model.SandwichOrder;
-import be.abis.sandwich.model.SandwichOrderDetail;
+import be.abis.sandwich.dto.OrderDetailRequest;
+import be.abis.sandwich.dto.OrderDetailResponse;
+import be.abis.sandwich.dto.OrderRequest;
 import be.abis.sandwich.service.SandwichOrderService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+/** Talks DTOs only: the entities of the model package never leave the service layer. */
 @RestController
 @RequestMapping("/api/orders")
 @Tag(name = "Sandwich orders", description = "Order sandwiches; print and price the order of a course")
@@ -34,21 +36,21 @@ public class SandwichOrderController {
     @ApiResponse(responseCode = "400", description = "Invalid order")
     @ApiResponse(responseCode = "404", description = "Unknown sandwich")
     @ApiResponse(responseCode = "409", description = "The person already ordered the maximum of 2 sandwiches")
-    public void addSandwichOrderDetail(@Valid @RequestBody SandwichOrderDetail detail) {
-        sandwichOrderService.addSandwichOrderDetail(detail);
+    public OrderDetailResponse addSandwichOrderDetail(@Valid @RequestBody OrderDetailRequest request) {
+        return OrderDetailResponse.from(sandwichOrderService.addSandwichOrderDetail(request.toEntity()));
     }
 
     @PostMapping(value = "/print", produces = MediaType.TEXT_PLAIN_VALUE)
     @Operation(summary = "Print the order", description = "Writes the order of the course on that day to a .txt file and returns the same text.")
     @ApiResponse(responseCode = "404", description = "There is no order for this course on this day")
-    public String printSandwichOrder(@Valid @RequestBody SandwichOrder order) {
-        return sandwichOrderService.printSandwichOrder(order);
+    public String printSandwichOrder(@Valid @RequestBody OrderRequest request) {
+        return sandwichOrderService.printSandwichOrder(request.toEntity());
     }
 
     @PostMapping("/price")
     @Operation(summary = "Calculate the total price", description = "Calculates the total price of the order and saves it in the database. Returns the price.")
     @ApiResponse(responseCode = "404", description = "There is no order for this course on this day")
-    public double calculateSandwichOrderPrice(@Valid @RequestBody SandwichOrder order) {
-        return sandwichOrderService.calculateSandwichOrderPrice(order);
+    public double calculateSandwichOrderPrice(@Valid @RequestBody OrderRequest request) {
+        return sandwichOrderService.calculateSandwichOrderPrice(request.toEntity());
     }
 }

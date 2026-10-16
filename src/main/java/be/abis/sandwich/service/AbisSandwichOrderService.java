@@ -63,16 +63,16 @@ public class AbisSandwichOrderService implements SandwichOrderService {
     }
 
     @Override
-    public void addSandwichOrderDetail(SandwichOrderDetail sod) {
+    public SandwichOrderDetail addSandwichOrderDetail(SandwichOrderDetail sod) {
         // One order at a time: when two students order at the same moment, both would otherwise try to create the
         // same person/course/order, or both pass the "max 2" check. Ordering is rare and fast, so this is cheap.
         // (The lock is held until the transaction has committed. It protects a single running application.)
         synchronized (orderLock) {
-            transactions.executeWithoutResult(status -> addInTransaction(sod));
+            return transactions.execute(status -> addInTransaction(sod));
         }
     }
 
-    private void addInTransaction(SandwichOrderDetail sod) {
+    private SandwichOrderDetail addInTransaction(SandwichOrderDetail sod) {
         // never trust the sandwich data of the client: use what is in the database
         Sandwich sandwich = sandwichService.findSandwichById(sod.getSandwich().getId());
         Person person = personService.findOrCreatePerson(sod.getPerson().getFirstName(), sod.getPerson().getLastName());
@@ -87,7 +87,7 @@ public class AbisSandwichOrderService implements SandwichOrderService {
         sod.setPerson(person);
         sod.setSandwichOrder(order);
         sod.setId(0); // a new row: an id from the client must never overwrite an existing one
-        sandwichOrderDetailRepository.save(sod);
+        return sandwichOrderDetailRepository.save(sod);
     }
 
     @Override

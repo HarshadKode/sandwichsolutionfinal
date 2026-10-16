@@ -9,8 +9,6 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotNull;
 
 import java.time.LocalDate;
 
@@ -23,11 +21,8 @@ public class SandwichOrder {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int id;
-    @NotNull(message = "orderDate is required (yyyy-MM-dd)")
     @Column(name = "order_date", nullable = false)
     private LocalDate orderDate;
-    @NotNull(message = "course is required")
-    @Valid
     @ManyToOne(optional = false)
     @JoinColumn(name = "course_id", nullable = false)
     private Course course;

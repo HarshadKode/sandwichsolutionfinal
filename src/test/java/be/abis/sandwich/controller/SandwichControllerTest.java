@@ -54,6 +54,19 @@ class SandwichControllerTest {
     }
 
     @Test
+    void theApiOnlyExposesTheFieldsOfTheDto() throws Exception {
+        when(sandwichService.findSandwiches(null, null)).thenReturn(List.of(hesp));
+
+        mockMvc.perform(get("/api/sandwiches"))
+                .andExpect(jsonPath("$[0]", org.hamcrest.Matchers.aMapWithSize(5)))
+                .andExpect(jsonPath("$[0].id").exists())
+                .andExpect(jsonPath("$[0].name").exists())
+                .andExpect(jsonPath("$[0].description").exists())
+                .andExpect(jsonPath("$[0].category").exists())
+                .andExpect(jsonPath("$[0].basePrice").exists());
+    }
+
+    @Test
     void getPassesTheFiltersToTheService() throws Exception {
         when(sandwichService.findSandwiches("Vlees", "he")).thenReturn(List.of(hesp));
 
@@ -93,6 +106,19 @@ class SandwichControllerTest {
                 .andExpect(header().string("Location", "http://localhost/api/sandwiches/42"))
                 .andExpect(jsonPath("$.id").value(42))
                 .andExpect(jsonPath("$.name").value("Pinky"));
+    }
+
+    @Test
+    void postIgnoresAnIdSentByTheClient() throws Exception {
+        when(sandwichService.addSandwich(any(Sandwich.class))).thenAnswer(call -> call.getArgument(0));
+
+        mockMvc.perform(post("/api/sandwiches").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"id\": 1, \"name\": \"Pinky\", \"category\": \"Specials\", \"basePrice\": 4.8}"))
+                .andExpect(status().isCreated());
+
+        org.mockito.ArgumentCaptor<Sandwich> captor = org.mockito.ArgumentCaptor.forClass(Sandwich.class);
+        verify(sandwichService).addSandwich(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().getId()).isZero();
     }
 
     @Test

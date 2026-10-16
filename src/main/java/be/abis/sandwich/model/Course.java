@@ -7,7 +7,6 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
-import jakarta.validation.constraints.NotBlank;
 
 @Entity
 @Table(name = "abis_courses", uniqueConstraints = @UniqueConstraint(name = "uq_abis_courses_title", columnNames = "title"))
@@ -16,7 +15,6 @@ public class Course {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int id;
-    @NotBlank(message = "course title is required")
     @Column(nullable = false, length = 200)
     private String title;
 

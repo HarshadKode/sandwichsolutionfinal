@@ -19,6 +19,7 @@ Follows the diagram of the assignment: controller → service (interface + `Abis
 
 ```
 controller/   SandwichController, SandwichOrderController, GlobalExceptionHandler
+dto/          request and response records (what goes over HTTP) with their validation, and the mapping to/from entities
 service/      SandwichService, CourseService, PersonService, SandwichOrderService  (+ Abis… implementations)
 repository/   SandwichRepository, CourseRepository, PersonRepository,
               SandwichOrderRepository, SandwichOrderDetailRepository             (Spring Data JpaRepository interfaces)
@@ -26,6 +27,8 @@ model/        JPA entities: Sandwich, Course, Person, SandwichOrder, SandwichOrd
 exception/    domain exceptions, mapped to HTTP 404 / 409
 config/       AngularFrontendConfig (serves the frontend), OpenApiConfig
 ```
+
+Controllers only talk DTOs: the entities of `model/` never go over HTTP. A request DTO validates the input (Bean Validation, clear messages) and converts itself to an entity (`toEntity()`); a response DTO is built from an entity (`from(entity)`). That way the database model can change without breaking the API, a client can't set fields it shouldn't (ids, prices, totals) and can't see fields it shouldn't.
 
 Tables (created by Hibernate from the entities): `sandwiches`, `abis_courses`, `abis_persons`, `sandwich_orders` (with `total_price`), `sandwich_order_details`.
 

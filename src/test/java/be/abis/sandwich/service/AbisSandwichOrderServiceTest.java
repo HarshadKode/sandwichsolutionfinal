@@ -93,8 +93,11 @@ class AbisSandwichOrderServiceTest {
         when(orderRepository.findByOrderDateAndCourse(DAY, course)).thenReturn(Optional.empty());
         when(orderRepository.save(any(SandwichOrder.class))).thenReturn(existingOrder);
         when(detailRepository.countSandwichesOfPerson(existingOrder, ada)).thenReturn(0);
+        when(detailRepository.save(sod)).thenReturn(sod);
 
-        service.addSandwichOrderDetail(sod);
+        SandwichOrderDetail saved = service.addSandwichOrderDetail(sod);
+
+        assertThat(saved).isSameAs(sod);
 
         verify(detailRepository).save(sod);
         assertThat(sod.getSandwich()).isSameAs(pinky);

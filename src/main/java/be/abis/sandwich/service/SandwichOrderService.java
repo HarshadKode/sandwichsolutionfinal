@@ -7,9 +7,9 @@ public interface SandwichOrderService {
 
     /**
      * Adds a sandwich to the order of the course on that day (the order is created with the first sandwich).
-     * A person can order at most 2 sandwiches per order.
+     * A person can order at most 2 sandwiches per order. Returns the saved detail.
      */
-    void addSandwichOrderDetail(SandwichOrderDetail sod);
+    SandwichOrderDetail addSandwichOrderDetail(SandwichOrderDetail sod);
 
     /** Writes the order to a readable .txt file and returns the text that was written. */
     String printSandwichOrder(SandwichOrder so);

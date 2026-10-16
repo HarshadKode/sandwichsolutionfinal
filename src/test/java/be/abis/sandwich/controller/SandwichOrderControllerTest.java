@@ -50,9 +50,24 @@ class SandwichOrderControllerTest {
     private SandwichOrderService sandwichOrderService;
 
     @Test
-    void orderingASandwichAnswers201AndPassesTheWholeDetailToTheService() throws Exception {
+    void orderingASandwichAnswers201WithTheSavedDetailAndPassesTheRequestToTheService() throws Exception {
+        when(sandwichOrderService.addSandwichOrderDetail(any(SandwichOrderDetail.class))).thenAnswer(call -> {
+            SandwichOrderDetail saved = call.getArgument(0);
+            saved.setId(5);
+            saved.getSandwichOrder().setId(100);
+            return saved;
+        });
+
         mockMvc.perform(post("/api/orders/details").contentType(MediaType.APPLICATION_JSON).content(DETAIL_JSON))
-                .andExpect(status().isCreated());
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(5))
+                .andExpect(jsonPath("$.sandwich.id").value(21))
+                .andExpect(jsonPath("$.amount").value(1))
+                .andExpect(jsonPath("$.breadType").value("WHITE"))
+                .andExpect(jsonPath("$.person.lastName").value("Lovelace"))
+                .andExpect(jsonPath("$.sandwichOrder.id").value(100))
+                .andExpect(jsonPath("$.sandwichOrder.orderDate").value("2026-10-16"))
+                .andExpect(jsonPath("$.sandwichOrder.course.title").value("Spring Boot"));
 
         ArgumentCaptor<SandwichOrderDetail> captor = ArgumentCaptor.forClass(SandwichOrderDetail.class);
         verify(sandwichOrderService).addSandwichOrderDetail(captor.capture());
@@ -95,6 +110,21 @@ class SandwichOrderControllerTest {
                         .content(DETAIL_JSON.replace("WHITE", "RYE")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("WHITE or BROWN")));
+    }
+
+    @Test
+    void missingFieldsAreReportedWithAClearMessage() throws Exception {
+        String json = """
+                {"sandwich": {}, "breadType": "WHITE",
+                 "person": {"firstName": "Ada", "lastName": "Lovelace"},
+                 "sandwichOrder": {"orderDate": "2026-10-16", "course": {"title": "Spring Boot"}}}""";
+
+        mockMvc.perform(post("/api/orders/details").contentType(MediaType.APPLICATION_JSON).content(json))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("sandwich id is required")))
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("amount is required")))
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("vegetables is required")));
+        verify(sandwichOrderService, never()).addSandwichOrderDetail(any());
     }
 
     @Test
