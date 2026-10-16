@@ -12,6 +12,8 @@ import be.abis.sandwich.repository.CourseRepository;
 import be.abis.sandwich.repository.SandwichOrderDetailRepository;
 import be.abis.sandwich.repository.SandwichOrderRepository;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.ConcurrencyFailureException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionOperations;
@@ -28,11 +30,14 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 public class AbisSandwichOrderService implements SandwichOrderService {
 
     public static final int MAX_SANDWICHES_PER_PERSON = 2;
+    /** Number of times an order is tried when it keeps colliding with orders that are placed at the same moment. */
+    static final int MAX_ATTEMPTS = 10;
 
     private final SandwichService sandwichService;
     private final CourseService courseService;
@@ -41,7 +46,7 @@ public class AbisSandwichOrderService implements SandwichOrderService {
     private final SandwichOrderRepository sandwichOrderRepository;
     private final SandwichOrderDetailRepository sandwichOrderDetailRepository;
     private final TransactionOperations transactions;
-    private final Object orderLock = new Object();
+    private final long retryPauseMillis;
     private final Path printDirectory;
 
     public AbisSandwichOrderService(SandwichService sandwichService,
@@ -51,6 +56,7 @@ public class AbisSandwichOrderService implements SandwichOrderService {
                                     SandwichOrderRepository sandwichOrderRepository,
                                     SandwichOrderDetailRepository sandwichOrderDetailRepository,
                                     TransactionOperations transactions,
+                                    @Value("${sandwich.order.retry-pause-ms:25}") long retryPauseMillis,
                                     @Value("${sandwich.print.directory:orders}") String printDirectory) {
         this.sandwichService = sandwichService;
         this.courseService = courseService;
@@ -59,16 +65,43 @@ public class AbisSandwichOrderService implements SandwichOrderService {
         this.sandwichOrderRepository = sandwichOrderRepository;
         this.sandwichOrderDetailRepository = sandwichOrderDetailRepository;
         this.transactions = transactions;
+        this.retryPauseMillis = retryPauseMillis;
         this.printDirectory = Path.of(printDirectory);
     }
 
     @Override
     public SandwichOrderDetail addSandwichOrderDetail(SandwichOrderDetail sod) {
-        // One order at a time: when two students order at the same moment, both would otherwise try to create the
-        // same person/course/order, or both pass the "max 2" check. Ordering is rare and fast, so this is cheap.
-        // (The lock is held until the transaction has committed. It protects a single running application.)
-        synchronized (orderLock) {
-            return transactions.execute(status -> addInTransaction(sod));
+        // Students ordering at the same moment can collide: both see that the person/course/order does not exist yet
+        // and both create it, or both pass the "max 2" check. In a SERIALIZABLE transaction the database refuses one
+        // of them (a concurrency failure, or a unique constraint that says the person/course/order now exists), and
+        // then the order is simply tried again: the second time it sees what the other student's transaction saved.
+        // Business errors (max 2, unknown sandwich) are never retried.
+        for (int attempt = 1; ; attempt++) {
+            try {
+                return transactions.execute(status -> addInTransaction(sod));
+            } catch (ConcurrencyFailureException | DataIntegrityViolationException e) {
+                if (attempt == MAX_ATTEMPTS) {
+                    throw e;
+                }
+                pauseBeforeRetry(attempt);
+            }
+        }
+    }
+
+    /**
+     * Waits a random time before the next attempt, a bit longer after every failed attempt, so that orders that
+     * collided don't collide again at the same moment.
+     */
+    private void pauseBeforeRetry(int attempt) {
+        if (retryPauseMillis <= 0) {
+            return;
+        }
+        long longestPause = retryPauseMillis << Math.min(attempt, 5);
+        try {
+            Thread.sleep(ThreadLocalRandom.current().nextLong(longestPause));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while placing the order", e);
         }
     }
 
@@ -87,7 +120,14 @@ public class AbisSandwichOrderService implements SandwichOrderService {
         sod.setPerson(person);
         sod.setSandwichOrder(order);
         sod.setId(0); // a new row: an id from the client must never overwrite an existing one
-        return sandwichOrderDetailRepository.save(sod);
+        SandwichOrderDetail saved = sandwichOrderDetailRepository.save(sod);
+
+        // The total price of the order is kept up to date. This writes to the order row, so two orders for the same
+        // order that are placed at the same moment conflict here: the SERIALIZABLE transaction of one of them fails
+        // and is retried (see addSandwichOrderDetail). That is what keeps the "max 2" check correct.
+        order.setTotalPrice(total(sandwichOrderDetailRepository.findDetailsByOrder(order)));
+        sandwichOrderRepository.save(order);
+        return saved;
     }
 
     @Override

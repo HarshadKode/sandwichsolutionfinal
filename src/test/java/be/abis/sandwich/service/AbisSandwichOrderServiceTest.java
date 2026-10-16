@@ -20,6 +20,8 @@ import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.support.TransactionOperations;
 
 import java.io.IOException;
@@ -33,7 +35,9 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -64,7 +68,7 @@ class AbisSandwichOrderServiceTest {
     @BeforeEach
     void setUp() {
         service = new AbisSandwichOrderService(sandwichService, courseService, personService, courseRepository,
-                orderRepository, detailRepository, TransactionOperations.withoutTransaction(), printDirectory.toString());
+                orderRepository, detailRepository, TransactionOperations.withoutTransaction(), 0, printDirectory.toString());
     }
 
     private SandwichOrder orderWithId(int id) {
@@ -116,7 +120,7 @@ class AbisSandwichOrderServiceTest {
 
         service.addSandwichOrderDetail(sod);
 
-        verify(orderRepository, never()).save(any());
+        verify(orderRepository, never()).save(argThat(order -> order != existingOrder)); // no new order
         verify(detailRepository).save(sod);
     }
 
@@ -157,6 +161,69 @@ class AbisSandwichOrderServiceTest {
 
         assertThatThrownBy(() -> service.addSandwichOrderDetail(sod)).isInstanceOf(SandwichNotFoundException.class);
         verify(detailRepository, never()).save(any());
+    }
+
+    @Test
+    void theTotalPriceOfTheOrderIsUpdatedWhenASandwichIsOrdered() {
+        SandwichOrderDetail sod = request(1, 2, "Bob", "Builder");
+        when(sandwichService.findSandwichById(1)).thenReturn(hesp);
+        when(personService.findOrCreatePerson("Bob", "Builder")).thenReturn(bob);
+        when(courseService.findOrCreateCourse("Spring Boot")).thenReturn(course);
+        when(orderRepository.findByOrderDateAndCourse(DAY, course)).thenReturn(Optional.of(existingOrder));
+        when(detailRepository.save(sod)).thenReturn(sod);
+        when(detailRepository.findDetailsByOrder(existingOrder)).thenReturn(List.of(
+                new SandwichOrderDetail(pinky, 1, BreadType.WHITE, true, "", ada), sod));
+        sod.setSandwich(hesp);
+
+        service.addSandwichOrderDetail(sod);
+
+        assertThat(existingOrder.getTotalPrice()).isEqualTo(11.2);   // 4.80 + 2 * 3.20
+        verify(orderRepository).save(existingOrder);
+    }
+
+    // ---- retry when orders collide ----
+
+    private void everythingExistsForAda(SandwichOrderDetail sod) {
+        when(sandwichService.findSandwichById(21)).thenReturn(pinky);
+        when(personService.findOrCreatePerson("Ada", "Lovelace")).thenReturn(ada);
+        when(courseService.findOrCreateCourse("Spring Boot")).thenReturn(course);
+        when(orderRepository.findByOrderDateAndCourse(DAY, course)).thenReturn(Optional.of(existingOrder));
+        when(detailRepository.countSandwichesOfPerson(existingOrder, ada)).thenReturn(0);
+    }
+
+    @Test
+    void anOrderThatCollidesWithAnotherOrderIsTriedAgain() {
+        SandwichOrderDetail sod = request(21, 1, "Ada", "Lovelace");
+        everythingExistsForAda(sod);
+        when(detailRepository.save(sod))
+                .thenThrow(new CannotAcquireLockException("could not serialize access"))
+                .thenThrow(new DataIntegrityViolationException("unique constraint: another order created the same person"))
+                .thenReturn(sod);
+
+        SandwichOrderDetail saved = service.addSandwichOrderDetail(sod);
+
+        assertThat(saved).isSameAs(sod);
+        verify(detailRepository, times(3)).save(sod);
+    }
+
+    @Test
+    void anOrderThatKeepsCollidingGivesUp() {
+        SandwichOrderDetail sod = request(21, 1, "Ada", "Lovelace");
+        everythingExistsForAda(sod);
+        when(detailRepository.save(sod)).thenThrow(new CannotAcquireLockException("could not serialize access"));
+
+        assertThatThrownBy(() -> service.addSandwichOrderDetail(sod)).isInstanceOf(CannotAcquireLockException.class);
+        verify(detailRepository, times(AbisSandwichOrderService.MAX_ATTEMPTS)).save(sod);
+    }
+
+    @Test
+    void businessErrorsAreNotRetried() {
+        SandwichOrderDetail sod = request(21, 1, "Ada", "Lovelace");
+        everythingExistsForAda(sod);
+        when(detailRepository.countSandwichesOfPerson(existingOrder, ada)).thenReturn(2);
+
+        assertThatThrownBy(() -> service.addSandwichOrderDetail(sod)).isInstanceOf(MaxSandwichesExceededException.class);
+        verify(personService, times(1)).findOrCreatePerson("Ada", "Lovelace");
     }
 
     // ---- calculateSandwichOrderPrice ----
@@ -243,7 +310,7 @@ class AbisSandwichOrderServiceTest {
     void printFailsWithAClearErrorWhenTheFileCannotBeWritten() throws IOException {
         Path notADirectory = Files.createFile(printDirectory.resolve("blocked"));
         AbisSandwichOrderService broken = new AbisSandwichOrderService(sandwichService, courseService, personService,
-                courseRepository, orderRepository, detailRepository, TransactionOperations.withoutTransaction(), notADirectory.toString());
+                courseRepository, orderRepository, detailRepository, TransactionOperations.withoutTransaction(), 0, notADirectory.toString());
         orderExists();
         when(detailRepository.findDetailsByOrder(existingOrder)).thenReturn(List.of(stored(hesp, 1, ada, true, "")));
 

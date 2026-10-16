@@ -53,7 +53,19 @@ Rules and choices:
 * A person can order **at most 2 sandwiches per order** (amount 1 or 2 per request, 2 in total): HTTP 409 otherwise.
 * The sandwich data sent by the client is ignored except for the id; the price always comes from the database.
 * Total price = sum of `basePrice × amount` (calculated with `BigDecimal`, 2 decimals). Bread type and vegetables don't change the price.
-* Orders are added one at a time (a lock in `AbisSandwichOrderService`), so students ordering at the same moment can't create duplicate persons/orders or exceed the limit. This protects a single running application, not several instances.
+* **Students ordering at the same moment** (see `AbisSandwichOrderService.addSandwichOrderDetail`): adding a sandwich runs in a
+  `SERIALIZABLE` transaction (`TransactionConfig`), which makes the database behave as if simultaneous orders ran one after the
+  other. When two orders collide, the database refuses one of them (a concurrency failure, or a unique constraint because the
+  person/course/order was just created by the other order) and the service **retries** it, a bit later and with a random pause.
+  The second time it sees what the other order saved. Business errors (max 2, unknown sandwich) are never retried.
+  Without this, two simultaneous first orders would both try to create the same person/course/order (a 500), and one person could
+  exceed the limit of 2.
+* Every order also updates the **total price** saved on the order. That is a read-modify-write on one row, so simultaneous orders
+  for the same order really conflict. This matters: `SERIALIZABLE` only detects conflicts between transactions that touch the
+  same rows, so without that shared row two orders of the same person could both insert a sandwich and pass the "max 2" check
+  (this was seen in the tests on H2; Oracle's `SERIALIZABLE` has the same limit).
+* The price of this: all orders of one course queue up on one row. For a class this is fine (the tests place 15 simultaneous orders);
+  after 10 failed attempts the client gets a 409 "server is busy, try again".
 * No Spring Security (not required for this exercise).
 
 ## Database

@@ -5,6 +5,7 @@ import be.abis.sandwich.exception.PrintOrderException;
 import be.abis.sandwich.exception.ResourceNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.ConcurrencyFailureException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -38,6 +39,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(ConflictException.class)
     public ProblemDetail handleConflict(ConflictException e) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
+    }
+
+    /** Too many orders at the same moment: the retries of the service were used up. */
+    @ExceptionHandler(ConcurrencyFailureException.class)
+    public ProblemDetail handleBusy(ConcurrencyFailureException e) {
+        log.warn("Too many simultaneous changes", e);
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "The server is busy with other orders. Please try again.");
     }
 
     /** Safety net: the database refused the change (e.g. a unique constraint) because of a concurrent change. */

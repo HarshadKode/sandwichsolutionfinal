@@ -1,5 +1,7 @@
 package be.abis.sandwich;
 
+import org.junit.jupiter.api.RepeatedTest;
+import org.junit.jupiter.api.RepetitionInfo;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,6 +16,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -119,19 +122,12 @@ class SandwichApiIntegrationTest {
         mockMvc.perform(delete("/api/sandwiches/" + pinky)).andExpect(status().isConflict());
     }
 
-    @Test
-    void ordersAtTheSameMomentNeitherFailNorBreakTheLimit() throws Exception {
-        int hesp = idOf("Hesp");
-        String body = """
-                {"sandwich": {"id": %d}, "amount": 1, "breadType": "WHITE", "vegetables": true, "comment": "",
-                 "person": {"firstName": "Grace", "lastName": "Hopper"},
-                 "sandwichOrder": {"orderDate": "2026-10-16", "course": {"title": "Concurrency"}}}""".formatted(hesp);
-
-        int parallel = 8;
-        ExecutorService pool = Executors.newFixedThreadPool(parallel);
+    /** Places all orders at the same moment (each on its own thread) and returns the HTTP status codes. */
+    private List<Integer> orderAtTheSameMoment(List<String> bodies) throws Exception {
+        ExecutorService pool = Executors.newFixedThreadPool(bodies.size());
         CountDownLatch start = new CountDownLatch(1);
         List<Future<Integer>> results = new ArrayList<>();
-        for (int i = 0; i < parallel; i++) {
+        for (String body : bodies) {
             results.add(pool.submit(() -> {
                 start.await();
                 return mockMvc.perform(post("/api/orders/details").contentType(MediaType.APPLICATION_JSON).content(body))
@@ -141,13 +137,47 @@ class SandwichApiIntegrationTest {
         start.countDown();
         List<Integer> statuses = new ArrayList<>();
         for (Future<Integer> result : results) {
-            statuses.add(result.get(30, TimeUnit.SECONDS));
+            statuses.add(result.get(60, TimeUnit.SECONDS));
         }
         pool.shutdown();
+        return statuses;
+    }
 
-        // first of the day created the order, person and course; only 2 sandwiches fit, the rest is a clean 409
+    private String orderBody(int sandwichId, String first, String last, String course) {
+        return """
+                {"sandwich": {"id": %d}, "amount": 1, "breadType": "WHITE", "vegetables": true, "comment": "",
+                 "person": {"firstName": "%s", "lastName": "%s"},
+                 "sandwichOrder": {"orderDate": "2026-10-16", "course": {"title": "%s"}}}""".formatted(sandwichId, first, last, course);
+    }
+
+    @RepeatedTest(5)
+    void theSamePersonOrderingAtTheSameMomentCannotExceedTheLimit(RepetitionInfo info) throws Exception {
+        String course = "Same person " + info.getCurrentRepetition();
+        String body = orderBody(idOf("Hesp"), "Grace", "Hopper", course);
+
+        List<Integer> statuses = orderAtTheSameMoment(Collections.nCopies(8, body));
+
+        // the first order of the day creates the person, course and order; only 2 sandwiches fit, the rest is a clean 409
         assertThat(statuses).filteredOn(code -> code == 201).hasSize(2);
-        assertThat(statuses).filteredOn(code -> code == 409).hasSize(parallel - 2);
+        assertThat(statuses).filteredOn(code -> code == 409).hasSize(6);
+    }
+
+    @RepeatedTest(5)
+    void manyStudentsOrderingForANewCourseAtTheSameMomentAllSucceed(RepetitionInfo info) throws Exception {
+        String course = "New course " + info.getCurrentRepetition();
+        int hesp = idOf("Hesp");
+        List<String> bodies = new ArrayList<>();
+        for (int i = 1; i <= 15; i++) {
+            bodies.add(orderBody(hesp, "Student" + i, "Test", course));
+        }
+
+        List<Integer> statuses = orderAtTheSameMoment(bodies);
+
+        // every student is a different person: they all fit, only the first one creates the course and the order
+        assertThat(statuses).containsOnly(201);
+        mockMvc.perform(post("/api/orders/price").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"orderDate\": \"2026-10-16\", \"course\": {\"title\": \"" + course + "\"}}"))
+                .andExpect(content().string("48.0"));   // 15 * 3.20
     }
 
     @Test
