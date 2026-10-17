@@ -57,6 +57,15 @@ class OrderRepositoriesTest {
     }
 
     @Test
+    void coursesComeSortedByTitle() {
+        courseRepository.save(new Course("Zeta course"));
+        courseRepository.save(new Course("Alpha course"));
+
+        assertThat(courseRepository.findAllByOrderByTitleAsc())
+                .extracting(Course::getTitle).containsExactly("Alpha course", "Spring Boot", "Zeta course");
+    }
+
+    @Test
     void personCanBeFoundByNameIgnoringCase() {
         assertThat(person.getId()).isPositive();
         assertThat(personRepository.findByFirstNameIgnoreCaseAndLastNameIgnoreCase("ADA", "lovelace"))

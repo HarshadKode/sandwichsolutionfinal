@@ -181,6 +181,16 @@ class SandwichApiIntegrationTest {
     }
 
     @Test
+    void coursesAppearAsSoonAsSomeoneOrdersForThem() throws Exception {
+        String course = "Listed course";
+        orderAtTheSameMoment(List.of(orderBody(idOf("Hesp"), "Ada", "Lovelace", course)));
+
+        mockMvc.perform(get("/api/courses"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.title == '" + course + "')]").exists());
+    }
+
+    @Test
     void pricingAnOrderThatDoesNotExistIs404() throws Exception {
         mockMvc.perform(post("/api/orders/price").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"orderDate\": \"2000-01-01\", \"course\": {\"title\": \"Nothing\"}}"))

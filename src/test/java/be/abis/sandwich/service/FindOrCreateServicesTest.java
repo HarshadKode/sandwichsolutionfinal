@@ -9,6 +9,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -47,6 +48,14 @@ class FindOrCreateServicesTest {
 
         assertThat(created.getId()).isEqualTo(7);
         assertThat(created.getTitle()).isEqualTo("Java");
+    }
+
+    @Test
+    void allCoursesComeFromTheRepositorySortedByTitle() {
+        List<Course> courses = List.of(new Course(2, "Java"), new Course(1, "Spring Boot"));
+        when(courseRepository.findAllByOrderByTitleAsc()).thenReturn(courses);
+
+        assertThat(new AbisCourseService(courseRepository).findAllCourses()).isEqualTo(courses);
     }
 
     @Test

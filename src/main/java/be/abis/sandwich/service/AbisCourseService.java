@@ -4,6 +4,8 @@ import be.abis.sandwich.model.Course;
 import be.abis.sandwich.repository.CourseRepository;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+
 @Service
 public class AbisCourseService implements CourseService {
 
@@ -18,5 +20,10 @@ public class AbisCourseService implements CourseService {
         String trimmed = title.trim();
         return courseRepository.findByTitleIgnoreCase(trimmed)
                 .orElseGet(() -> courseRepository.save(new Course(trimmed)));
+    }
+
+    @Override
+    public List<Course> findAllCourses() {
+        return courseRepository.findAllByOrderByTitleAsc();
     }
 }
