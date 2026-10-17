@@ -20,11 +20,33 @@
   </form>
 
   <div class="card panel">
-    <h2>Today's order</h2>
-    <label>
-      Training
-      <input name="course" [(ngModel)]="course" placeholder="Training title" />
-    </label>
+    <h2>Print or price an order</h2>
+    <div class="grid">
+      @if (coursesAvailable()) {
+        <div class="course-picker">
+          <label>
+            Course
+            <select name="course" [(ngModel)]="course">
+              @for (c of courses(); track c.title) {
+                <option [value]="c.title">{{ c.title }}</option>
+              } @empty {
+                <option value="">No orders yet</option>
+              }
+            </select>
+          </label>
+          <button type="button" class="secondary small" (click)="loadCourses()" aria-label="Refresh the courses" title="Refresh the courses">↻</button>
+        </div>
+      } @else {
+        <label>
+          Course
+          <input name="course" [(ngModel)]="course" placeholder="Training title" />
+        </label>
+      }
+      <label>
+        Date
+        <input name="orderDate" type="date" [(ngModel)]="orderDate" />
+      </label>
+    </div>
     <div class="actions">
       <button type="button" (click)="print()">🖨️ Print to .txt</button>
       <button type="button" class="secondary" (click)="calculate()">💶 Calculate total</button>

@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { ApiService } from '../api.service';
 import { categoryEmoji } from '../emoji';
-import { Sandwich, SandwichOrder } from '../models';
+import { Course, Sandwich, SandwichOrder } from '../models';
 import { StatusService } from '../status.service';
 
 @Component({
@@ -21,6 +21,9 @@ export class Admin implements OnInit {
     ...new Set(this.sandwiches().map((s) => s.category).filter(Boolean)),
   ].sort());
   protected readonly prices = signal<Record<number, number>>({});
+  protected readonly courses = signal<Course[]>([]);
+  /** False when the API has no /api/courses (yet): then the course has to be typed. */
+  protected readonly coursesAvailable = signal(false);
   protected readonly printed = signal<string | null>(null);
   protected readonly total = signal<number | null>(null);
   protected readonly emoji = categoryEmoji;
@@ -31,9 +34,23 @@ export class Admin implements OnInit {
   protected basePrice: number | null = null;
 
   protected course = '';
+  protected orderDate = today();
 
   async ngOnInit(): Promise<void> {
-    await this.load();
+    await Promise.all([this.load(), this.loadCourses()]);
+  }
+
+  protected async loadCourses(): Promise<void> {
+    try {
+      const list = await firstValueFrom(this.api.findCourses());
+      this.courses.set(list);
+      this.coursesAvailable.set(true);
+      if (!list.some((c) => c.title === this.course)) {
+        this.course = list[0]?.title ?? '';
+      }
+    } catch {
+      this.coursesAvailable.set(false); // no /api/courses: fall back to typing the course
+    }
   }
 
   private async load(): Promise<void> {
@@ -93,7 +110,7 @@ export class Admin implements OnInit {
 
   private order(): SandwichOrder {
     return {
-      orderDate: new Date().toLocaleDateString('sv-SE'), // yyyy-MM-dd
+      orderDate: this.orderDate,
       course: { title: this.course.trim() },
     };
   }
@@ -114,4 +131,9 @@ export class Admin implements OnInit {
       this.status.error(e);
     }
   }
+}
+
+/** Today as yyyy-MM-dd. */
+function today(): string {
+  return new Date().toLocaleDateString('sv-SE');
 }

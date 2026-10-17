@@ -45,6 +45,7 @@ Tables (created by Hibernate from the entities): `sandwiches`, `abis_courses`, `
 | `POST /api/orders/details` | order a sandwich (see rules below) |
 | `POST /api/orders/print` | body `{orderDate, course}`: writes `orders/sandwich-order_<date>_<course>.txt` and returns the text |
 | `POST /api/orders/price` | body `{orderDate, course}`: calculates the total, **saves it in `sandwich_orders.total_price`**, returns it |
+| `GET /api/courses` | the courses (`[{"title": "Spring Boot"}]`), sorted by title: the admin panel shows them in a dropdown. Optional for students: without it the panel falls back to a text field |
 
 Errors are JSON problem details (`{"status": 409, "detail": "..."}`), the frontend shows `detail`.
 

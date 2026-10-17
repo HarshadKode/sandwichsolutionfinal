@@ -1,7 +1,7 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable, map } from 'rxjs';
-import { Sandwich, SandwichOrder, SandwichOrderDetail } from './models';
+import { Course, Sandwich, SandwichOrder, SandwichOrderDetail } from './models';
 
 /**
  * All REST endpoints the frontend expects from the Spring Boot API.
@@ -9,6 +9,7 @@ import { Sandwich, SandwichOrder, SandwichOrderDetail } from './models';
  */
 export const ENDPOINTS = {
   sandwiches: '/api/sandwiches', // GET (?category=&name=), POST, GET /{id}, DELETE /{id}, PUT /{id}/price
+  courses: '/api/courses', // GET (optional: without it the admin panel lets you type the course)
   orderDetails: '/api/orders/details', // POST SandwichOrderDetail
   orderPrint: '/api/orders/print', // POST SandwichOrder
   orderPrice: '/api/orders/price', // POST SandwichOrder -> number
@@ -37,6 +38,10 @@ export class ApiService {
 
   deleteSandwich(id: number): Observable<unknown> {
     return this.http.delete(`${ENDPOINTS.sandwiches}/${id}`);
+  }
+
+  findCourses(): Observable<Course[]> {
+    return this.http.get<Course[]>(ENDPOINTS.courses);
   }
 
   addOrderDetail(detail: SandwichOrderDetail): Observable<unknown> {
