@@ -2,7 +2,6 @@ package be.abis.sandwich.service;
 
 import be.abis.sandwich.enumeration.BreadType;
 import be.abis.sandwich.exception.MaxSandwichesExceededException;
-import be.abis.sandwich.exception.PrintOrderException;
 import be.abis.sandwich.exception.SandwichNotFoundException;
 import be.abis.sandwich.exception.SandwichOrderNotFoundException;
 import be.abis.sandwich.model.Course;
@@ -13,21 +12,20 @@ import be.abis.sandwich.model.SandwichOrderDetail;
 import be.abis.sandwich.repository.CourseRepository;
 import be.abis.sandwich.repository.SandwichOrderDetailRepository;
 import be.abis.sandwich.repository.SandwichOrderRepository;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.api.io.TempDir;
+import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
-
+import org.springframework.core.retry.RetryPolicy;
+import org.springframework.core.retry.RetryTemplate;
 import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.ConcurrencyFailureException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.support.TransactionOperations;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -35,6 +33,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -52,10 +51,17 @@ class AbisSandwichOrderServiceTest {
     @Mock private CourseRepository courseRepository;
     @Mock private SandwichOrderRepository orderRepository;
     @Mock private SandwichOrderDetailRepository detailRepository;
+    @Mock private OrderPrinter orderPrinter;
 
-    @TempDir
-    private Path printDirectory;
+    /** Real objects (not mocks): no real transaction, and retries without waiting (1 attempt + 3 retries). */
+    @Spy private TransactionOperations transactions = TransactionOperations.withoutTransaction();
+    @Spy private RetryTemplate retryTemplate = new RetryTemplate(RetryPolicy.builder()
+            .includes(ConcurrencyFailureException.class, DataIntegrityViolationException.class)
+            .maxRetries(3)
+            .delay(Duration.ZERO)
+            .build());
 
+    @InjectMocks
     private AbisSandwichOrderService service;
 
     private final Course course = new Course(1, "Spring Boot");
@@ -65,25 +71,23 @@ class AbisSandwichOrderServiceTest {
     private final Sandwich hesp = new Sandwich(1, "Hesp", "Ham", "Vlees", 3.2);
     private final SandwichOrder existingOrder = orderWithId(100);
 
-    @BeforeEach
-    void setUp() {
-        service = new AbisSandwichOrderService(sandwichService, courseService, personService, courseRepository,
-                orderRepository, detailRepository, TransactionOperations.withoutTransaction(), 0, printDirectory.toString());
-    }
-
     private SandwichOrder orderWithId(int id) {
         SandwichOrder order = new SandwichOrder(DAY, course);
         order.setId(id);
         return order;
     }
 
-    /** What the controller receives: only ids / names, no database ids. */
+    /** What the controller passes on: only the id of the sandwich, the names of the person and the course. */
     private SandwichOrderDetail request(int sandwichId, int amount, String first, String last) {
         Sandwich requested = new Sandwich();
         requested.setId(sandwichId);
         SandwichOrderDetail sod = new SandwichOrderDetail(requested, amount, BreadType.WHITE, true, "", new Person(first, last));
         sod.setSandwichOrder(new SandwichOrder(DAY, new Course("Spring Boot")));
         return sod;
+    }
+
+    private SandwichOrderDetail stored(Sandwich sandwich, int amount, Person person, boolean vegetables, String comment) {
+        return new SandwichOrderDetail(sandwich, amount, BreadType.BROWN, vegetables, comment, person);
     }
 
     // ---- addSandwichOrderDetail ----
@@ -102,7 +106,6 @@ class AbisSandwichOrderServiceTest {
         SandwichOrderDetail saved = service.addSandwichOrderDetail(sod);
 
         assertThat(saved).isSameAs(sod);
-
         verify(detailRepository).save(sod);
         assertThat(sod.getSandwich()).isSameAs(pinky);
         assertThat(sod.getPerson()).isSameAs(ada);
@@ -127,10 +130,7 @@ class AbisSandwichOrderServiceTest {
     @Test
     void aPersonCanOrderTwoSandwichesInTotal() {
         SandwichOrderDetail sod = request(1, 1, "Ada", "Lovelace");
-        when(sandwichService.findSandwichById(1)).thenReturn(hesp);
-        when(personService.findOrCreatePerson("Ada", "Lovelace")).thenReturn(ada);
-        when(courseService.findOrCreateCourse("Spring Boot")).thenReturn(course);
-        when(orderRepository.findByOrderDateAndCourse(DAY, course)).thenReturn(Optional.of(existingOrder));
+        everythingExistsForAda();
         when(detailRepository.countSandwichesOfPerson(existingOrder, ada)).thenReturn(1);
 
         service.addSandwichOrderDetail(sod);
@@ -140,11 +140,8 @@ class AbisSandwichOrderServiceTest {
 
     @Test
     void aThirdSandwichForTheSamePersonIsRefused() {
-        SandwichOrderDetail sod = request(1, 1, "Ada", "Lovelace");
-        when(sandwichService.findSandwichById(1)).thenReturn(hesp);
-        when(personService.findOrCreatePerson("Ada", "Lovelace")).thenReturn(ada);
-        when(courseService.findOrCreateCourse("Spring Boot")).thenReturn(course);
-        when(orderRepository.findByOrderDateAndCourse(DAY, course)).thenReturn(Optional.of(existingOrder));
+        SandwichOrderDetail sod = request(21, 1, "Ada", "Lovelace");
+        everythingExistsForAda();
         when(detailRepository.countSandwichesOfPerson(existingOrder, ada)).thenReturn(2);
 
         assertThatThrownBy(() -> service.addSandwichOrderDetail(sod))
@@ -155,11 +152,12 @@ class AbisSandwichOrderServiceTest {
     }
 
     @Test
-    void anUnknownSandwichIsRefused() {
+    void anUnknownSandwichIsRefusedAndNotRetried() {
         SandwichOrderDetail sod = request(999, 1, "Ada", "Lovelace");
         when(sandwichService.findSandwichById(999)).thenThrow(new SandwichNotFoundException(999));
 
         assertThatThrownBy(() -> service.addSandwichOrderDetail(sod)).isInstanceOf(SandwichNotFoundException.class);
+        verify(sandwichService, times(1)).findSandwichById(999);
         verify(detailRepository, never()).save(any());
     }
 
@@ -171,8 +169,7 @@ class AbisSandwichOrderServiceTest {
         when(courseService.findOrCreateCourse("Spring Boot")).thenReturn(course);
         when(orderRepository.findByOrderDateAndCourse(DAY, course)).thenReturn(Optional.of(existingOrder));
         when(detailRepository.save(sod)).thenReturn(sod);
-        when(detailRepository.findDetailsByOrder(existingOrder)).thenReturn(List.of(
-                new SandwichOrderDetail(pinky, 1, BreadType.WHITE, true, "", ada), sod));
+        when(detailRepository.findDetailsByOrder(existingOrder)).thenReturn(List.of(stored(pinky, 1, ada, true, ""), sod));
         sod.setSandwich(hesp);
 
         service.addSandwichOrderDetail(sod);
@@ -183,18 +180,18 @@ class AbisSandwichOrderServiceTest {
 
     // ---- retry when orders collide ----
 
-    private void everythingExistsForAda(SandwichOrderDetail sod) {
-        when(sandwichService.findSandwichById(21)).thenReturn(pinky);
+    private void everythingExistsForAda() {
+        when(sandwichService.findSandwichById(anyInt())).thenReturn(pinky);
         when(personService.findOrCreatePerson("Ada", "Lovelace")).thenReturn(ada);
         when(courseService.findOrCreateCourse("Spring Boot")).thenReturn(course);
         when(orderRepository.findByOrderDateAndCourse(DAY, course)).thenReturn(Optional.of(existingOrder));
-        when(detailRepository.countSandwichesOfPerson(existingOrder, ada)).thenReturn(0);
     }
 
     @Test
     void anOrderThatCollidesWithAnotherOrderIsTriedAgain() {
         SandwichOrderDetail sod = request(21, 1, "Ada", "Lovelace");
-        everythingExistsForAda(sod);
+        everythingExistsForAda();
+        when(detailRepository.countSandwichesOfPerson(existingOrder, ada)).thenReturn(0);
         when(detailRepository.save(sod))
                 .thenThrow(new CannotAcquireLockException("could not serialize access"))
                 .thenThrow(new DataIntegrityViolationException("unique constraint: another order created the same person"))
@@ -207,19 +204,20 @@ class AbisSandwichOrderServiceTest {
     }
 
     @Test
-    void anOrderThatKeepsCollidingGivesUp() {
+    void anOrderThatKeepsCollidingGivesUpWithTheLastException() {
         SandwichOrderDetail sod = request(21, 1, "Ada", "Lovelace");
-        everythingExistsForAda(sod);
+        everythingExistsForAda();
+        when(detailRepository.countSandwichesOfPerson(existingOrder, ada)).thenReturn(0);
         when(detailRepository.save(sod)).thenThrow(new CannotAcquireLockException("could not serialize access"));
 
         assertThatThrownBy(() -> service.addSandwichOrderDetail(sod)).isInstanceOf(CannotAcquireLockException.class);
-        verify(detailRepository, times(AbisSandwichOrderService.MAX_ATTEMPTS)).save(sod);
+        verify(detailRepository, times(4)).save(sod);   // 1 attempt + 3 retries
     }
 
     @Test
-    void businessErrorsAreNotRetried() {
+    void theMaximumPerPersonIsNotRetried() {
         SandwichOrderDetail sod = request(21, 1, "Ada", "Lovelace");
-        everythingExistsForAda(sod);
+        everythingExistsForAda();
         when(detailRepository.countSandwichesOfPerson(existingOrder, ada)).thenReturn(2);
 
         assertThatThrownBy(() -> service.addSandwichOrderDetail(sod)).isInstanceOf(MaxSandwichesExceededException.class);
@@ -227,10 +225,6 @@ class AbisSandwichOrderServiceTest {
     }
 
     // ---- calculateSandwichOrderPrice ----
-
-    private SandwichOrderDetail stored(Sandwich sandwich, int amount, Person person, boolean vegetables, String comment) {
-        return new SandwichOrderDetail(sandwich, amount, BreadType.BROWN, vegetables, comment, person);
-    }
 
     private void orderExists() {
         when(courseRepository.findByTitleIgnoreCase("Spring Boot")).thenReturn(Optional.of(course));
@@ -273,49 +267,15 @@ class AbisSandwichOrderServiceTest {
     // ---- printSandwichOrder ----
 
     @Test
-    void printWritesAReadableTextFileAndReturnsTheText() throws IOException {
+    void printHandsTheOrderAndItsDetailsToThePrinterAndReturnsTheText() {
         orderExists();
-        when(detailRepository.findDetailsByOrder(existingOrder)).thenReturn(List.of(
-                stored(pinky, 1, ada, true, "no onions"),
-                stored(hesp, 1, ada, false, ""),
-                stored(hesp, 2, bob, true, "")));
+        List<SandwichOrderDetail> details = List.of(stored(pinky, 1, ada, true, "no onions"));
+        when(detailRepository.findDetailsByOrder(existingOrder)).thenReturn(details);
+        when(orderPrinter.print(existingOrder, details)).thenReturn("SANDWICH ORDER ...");
 
         String text = service.printSandwichOrder(new SandwichOrder(DAY, new Course("Spring Boot")));
 
-        Path file = printDirectory.resolve("sandwich-order_2026-10-16_spring-boot.txt");
-        assertThat(file).exists();
-        assertThat(Files.readString(file, StandardCharsets.UTF_8)).isEqualTo(text);
-        assertThat(text)
-                .contains("Course: Spring Boot", "Date:   2026-10-16")
-                .contains("Ada Lovelace", "Bob Builder")
-                .contains("1x Pinky", "remark: no onions")
-                .contains("1x Hesp")
-                .contains("Total: € 14.40")
-                .doesNotContain("\r");   // the same line endings on every platform
-    }
-
-    @Test
-    void printSumsTheSameSandwichInTheSummary() {
-        orderExists();
-        when(detailRepository.findDetailsByOrder(existingOrder)).thenReturn(List.of(
-                stored(hesp, 1, ada, true, ""),
-                stored(hesp, 2, bob, true, "")));
-
-        String text = service.printSandwichOrder(new SandwichOrder(DAY, new Course("Spring Boot")));
-
-        assertThat(text).contains("3x Hesp");
-    }
-
-    @Test
-    void printFailsWithAClearErrorWhenTheFileCannotBeWritten() throws IOException {
-        Path notADirectory = Files.createFile(printDirectory.resolve("blocked"));
-        AbisSandwichOrderService broken = new AbisSandwichOrderService(sandwichService, courseService, personService,
-                courseRepository, orderRepository, detailRepository, TransactionOperations.withoutTransaction(), 0, notADirectory.toString());
-        orderExists();
-        when(detailRepository.findDetailsByOrder(existingOrder)).thenReturn(List.of(stored(hesp, 1, ada, true, "")));
-
-        assertThatThrownBy(() -> broken.printSandwichOrder(new SandwichOrder(DAY, new Course("Spring Boot"))))
-                .isInstanceOf(PrintOrderException.class);
+        assertThat(text).isEqualTo("SANDWICH ORDER ...");
     }
 
     @Test
@@ -324,5 +284,6 @@ class AbisSandwichOrderServiceTest {
 
         assertThatThrownBy(() -> service.printSandwichOrder(new SandwichOrder(DAY, new Course("Nope"))))
                 .isInstanceOf(SandwichOrderNotFoundException.class);
+        verify(orderPrinter, never()).print(any(), any());
     }
 }

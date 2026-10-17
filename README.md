@@ -20,12 +20,13 @@ Follows the diagram of the assignment: controller → service (interface + `Abis
 ```
 controller/   SandwichController, SandwichOrderController, GlobalExceptionHandler
 dto/          request and response records (what goes over HTTP) with their validation, and the mapping to/from entities
-service/      SandwichService, CourseService, PersonService, SandwichOrderService  (+ Abis… implementations)
+service/      SandwichService, CourseService, PersonService, SandwichOrderService  (+ Abis… implementations),
+              OrderPrinter (writes the .txt file), OrderPrices (how a price is calculated)
 repository/   SandwichRepository, CourseRepository, PersonRepository,
               SandwichOrderRepository, SandwichOrderDetailRepository             (Spring Data JpaRepository interfaces)
 model/        JPA entities: Sandwich, Course, Person, SandwichOrder, SandwichOrderDetail (+ enumeration/BreadType)
 exception/    domain exceptions, mapped to HTTP 404 / 409
-config/       AngularFrontendConfig (serves the frontend), OpenApiConfig
+config/       AngularFrontendConfig (serves the frontend), OpenApiConfig, TransactionConfig (SERIALIZABLE), RetryConfig
 ```
 
 Controllers only talk DTOs: the entities of `model/` never go over HTTP. A request DTO validates the input (Bean Validation, clear messages) and converts itself to an entity (`toEntity()`); a response DTO is built from an entity (`from(entity)`). That way the database model can change without breaking the API, a client can't set fields it shouldn't (ids, prices, totals) and can't see fields it shouldn't.
@@ -56,7 +57,7 @@ Rules and choices:
 * **Students ordering at the same moment** (see `AbisSandwichOrderService.addSandwichOrderDetail`): adding a sandwich runs in a
   `SERIALIZABLE` transaction (`TransactionConfig`), which makes the database behave as if simultaneous orders ran one after the
   other. When two orders collide, the database refuses one of them (a concurrency failure, or a unique constraint because the
-  person/course/order was just created by the other order) and the service **retries** it, a bit later and with a random pause.
+  person/course/order was just created by the other order) and the service **retries** it (Spring's `RetryTemplate`, configured in `RetryConfig`: up to 10 attempts, a random pause that doubles each time).
   The second time it sees what the other order saved. Business errors (max 2, unknown sandwich) are never retried.
   Without this, two simultaneous first orders would both try to create the same person/course/order (a 500), and one person could
   exceed the limit of 2.
@@ -82,7 +83,7 @@ five tables live in one schema. To split them: sandwiches in one schema and the 
 ## Tests (`./mvnw verify`)
 
 * Repositories: `@DataJpaTest` on the embedded database (`SandwichRepositoryTest`, `OrderRepositoriesTest`)
-* Services: Mockito unit tests (`AbisSandwichServiceTest`, `AbisSandwichOrderServiceTest`, `FindOrCreateServicesTest`)
+* Services: Mockito unit tests with `@InjectMocks` (`AbisSandwichServiceTest`, `AbisSandwichOrderServiceTest`, `FindOrCreateServicesTest`, `OrderPrinterTest`)
 * Controllers: `@WebMvcTest` (`SandwichControllerTest`, `SandwichOrderControllerTest`)
 * Whole application over HTTP incl. parallel orders, print file and API docs: `SandwichApiIntegrationTest`
 
