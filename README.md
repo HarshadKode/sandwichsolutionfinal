@@ -21,7 +21,7 @@ Follows the diagram of the assignment: controller → service (interface + `Abis
 controller/   SandwichController, SandwichOrderController, GlobalExceptionHandler
 dto/          request and response records (what goes over HTTP) with their validation, and the mapping to/from entities
 service/      SandwichService, CourseService, PersonService, SandwichOrderService  (+ Abis… implementations),
-              OrderPrinter (writes the .txt file), OrderPrices (how a price is calculated)
+              OrderPrinter (writes the .txt file)
 repository/   SandwichRepository, CourseRepository, PersonRepository,
               SandwichOrderRepository, SandwichOrderDetailRepository             (Spring Data JpaRepository interfaces)
 model/        JPA entities: Sandwich, Course, Person, SandwichOrder, SandwichOrderDetail (+ enumeration/BreadType)

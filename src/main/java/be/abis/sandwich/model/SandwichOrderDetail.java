@@ -12,6 +12,8 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
+import java.math.BigDecimal;
+
 /** One person's sandwich in a {@link SandwichOrder}. */
 @Entity
 @Table(name = "sandwich_order_details")
@@ -48,6 +50,11 @@ public class SandwichOrderDetail {
         this.vegetables = vegetables;
         this.comment = comment;
         this.person = person;
+    }
+
+    /** Base price of the sandwich times the amount. */
+    public BigDecimal getPrice() {
+        return BigDecimal.valueOf(sandwich.getBasePrice()).multiply(BigDecimal.valueOf(amount));
     }
 
     public int getId() {

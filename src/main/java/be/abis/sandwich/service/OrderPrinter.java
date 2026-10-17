@@ -57,7 +57,7 @@ public class OrderPrinter {
             for (SandwichOrderDetail d : list) {
                 sb.append(String.format(Locale.ROOT, "  %dx %-22s %-6s bread, %s vegetables  %s\n",
                         d.getAmount(), d.getSandwich().getName(), d.getBreadType().name().toLowerCase(Locale.ROOT),
-                        d.isVegetables() ? "with" : "no  ", euro(OrderPrices.price(d))));
+                        d.isVegetables() ? "with" : "no  ", euro(d.getPrice())));
                 if (d.getComment() != null && !d.getComment().isBlank()) {
                     sb.append("     remark: ").append(d.getComment()).append('\n');
                 }
@@ -73,7 +73,7 @@ public class OrderPrinter {
         }
         summary.forEach((line, amount) -> sb.append(String.format(Locale.ROOT, "  %dx %s\n", amount, line)));
 
-        sb.append("\nTotal: ").append(euro(BigDecimal.valueOf(OrderPrices.total(details)))).append('\n');
+        sb.append("\nTotal: ").append(euro(BigDecimal.valueOf(SandwichOrder.totalPriceOf(details)))).append('\n');
         return sb.toString();
     }
 

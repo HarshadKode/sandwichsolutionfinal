@@ -10,7 +10,10 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.util.List;
 
 /** The sandwich order of one course on one day. */
 @Entity
@@ -69,6 +72,15 @@ public class SandwichOrder {
 
     public void setTotalPrice(double totalPrice) {
         this.totalPrice = totalPrice;
+    }
+
+    /** The total price of these details: the sum of their prices, rounded to 2 decimals (BigDecimal, so no floating point errors). */
+    public static double totalPriceOf(List<SandwichOrderDetail> details) {
+        return details.stream()
+                .map(SandwichOrderDetail::getPrice)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP)
+                .doubleValue();
     }
 
 }

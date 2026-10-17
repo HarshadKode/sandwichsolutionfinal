@@ -82,7 +82,7 @@ public class AbisSandwichOrderService implements SandwichOrderService {
         // The total price of the order is kept up to date. This writes to the order row, so two orders for the same
         // order that are placed at the same moment conflict here: the SERIALIZABLE transaction of one of them fails
         // and is retried (see addSandwichOrderDetail). That is what keeps the "max 2" check correct.
-        order.setTotalPrice(OrderPrices.total(sandwichOrderDetailRepository.findDetailsByOrder(order)));
+        order.setTotalPrice(SandwichOrder.totalPriceOf(sandwichOrderDetailRepository.findDetailsByOrder(order)));
         sandwichOrderRepository.save(order);
         return saved;
     }
@@ -98,7 +98,7 @@ public class AbisSandwichOrderService implements SandwichOrderService {
     @Transactional
     public double calculateSandwichOrderPrice(SandwichOrder so) {
         SandwichOrder order = findExistingOrder(so);
-        double total = OrderPrices.total(sandwichOrderDetailRepository.findDetailsByOrder(order));
+        double total = SandwichOrder.totalPriceOf(sandwichOrderDetailRepository.findDetailsByOrder(order));
         order.setTotalPrice(total);
         sandwichOrderRepository.save(order);
         return total;
