@@ -1,6 +1,6 @@
 package be.abis.sandwich.controller;
 
-import be.abis.sandwich.dto.CourseDto;
+import be.abis.sandwich.dto.CourseResponse;
 import be.abis.sandwich.service.CourseService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -24,7 +24,7 @@ public class CourseController {
 
     @GetMapping
     @Operation(summary = "List the courses", description = "All courses, sorted by title. A course exists as soon as the first sandwich is ordered for it.")
-    public List<CourseDto> findCourses() {
-        return courseService.findAllCourses().stream().map(CourseDto::from).toList();
+    public List<CourseResponse> findCourses() {
+        return courseService.findAllCourses().stream().map(CourseResponse::from).toList();
     }
 }
